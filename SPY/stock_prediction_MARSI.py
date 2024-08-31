@@ -1,7 +1,5 @@
+# Import necessary libraries
 import pandas as pd
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_squared_error
 from tensorflow.keras.callbacks import EarlyStopping
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler
@@ -14,11 +12,16 @@ import tensorflow as tf
 print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
 
 # Load and preprocess data
+def load_data(file_path):
+    data = pd.read_csv(file_path)
+    data.ffill(inplace=True)  # Updated to use ffill()
+    return data
+
 def load_and_preprocess_data(file_path):
     data = pd.read_csv(file_path)
     data = add_technical_indicators(data)
-    data.dropna(inplace=True)  # Ensure no missing values
-    return data
+    scaled_data, scaler = preprocess_data(data)
+    return scaled_data, scaler
 
 def preprocess_data(data):
     scaler = MinMaxScaler(feature_range=(0, 1))
@@ -26,13 +29,12 @@ def preprocess_data(data):
     return scaled_data, scaler
 
 # Create training and test sets
-def create_datasets(data, look_back=60):
+def create_datasets(scaled_data, look_back=60):
     X, y = [], []
-    for i in range(look_back, len(data)):
-        X.append(data.iloc[i-look_back:i].values)
-        y.append(data.iloc[i, data.columns.get_loc('Close')])
-    X, y = np.array(X), np.array(y)
-    X = X.reshape(X.shape[0], -1)  # Flatten the input for Random Forest
+    for i in range(look_back, len(scaled_data)):
+        X.append(scaled_data[i-look_back:i])
+        y.append(scaled_data[i, 3])  # Assuming 'Close' is the target
+    X, y = np.array(X), np.array(y).reshape(-1, 1)  # Reshape y to match model output
     train_size = int(len(X) * 0.8)
     return X[:train_size], X[train_size:], y[:train_size], y[train_size:]
 
@@ -62,16 +64,25 @@ def build_model(input_shape):
     model.compile(optimizer='adam', loss='mean_squared_error')
     return model
 
-def train_model(X_train, y_train):
-    model = RandomForestRegressor(n_estimators=100, random_state=42)
-    model.fit(X_train, y_train)
-    return model
+def train_model(model, X_train, y_train, epochs=100, batch_size=32):
+    early_stopping = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
+    model.fit(X_train, y_train, epochs=epochs, batch_size=batch_size, validation_split=0.2, callbacks=[early_stopping])
 
 # Evaluate the model
 def evaluate_model(model, X_test, y_test, scaler, original_data):
-    predictions = model.predict(X_test)
-    mse = mean_squared_error(y_test, predictions)
-    print(f'Mean Squared Error: {mse}')
+    predicted_prices = model.predict(X_test)
+    
+    # Create a placeholder array with the same shape as the scaled data
+    predicted_prices_full = np.zeros((predicted_prices.shape[0], scaler.n_features_in_))
+    
+    # Insert the predicted prices into the appropriate column (assuming 'Close' is the 4th column)
+    predicted_prices_full[:, 3] = predicted_prices[:, 0]
+    
+    # Inverse transform the entire array
+    predicted_prices_full = scaler.inverse_transform(predicted_prices_full)
+    
+    # Extract the 'Close' prices
+    predicted_prices = predicted_prices_full[:, 3]
     
     # Plot the results
     plt.plot(original_data['Close'][len(original_data) - len(y_test):], color='blue', label='Actual Prices')
@@ -88,21 +99,21 @@ def evaluate_model(model, X_test, y_test, scaler, original_data):
         'Actual': original_data['Close'][len(original_data) - len(y_test):].values,
         'Predicted': predicted_prices
     })
-    
     results.to_csv('predictions.csv', index=False)
 
 # Main function to run the steps
 def main():
     file_path = 'SPY_1993_2024.csv'
-    data = load_and_preprocess_data(file_path)
-    X_train, X_test, y_train, y_test = create_datasets(data)
-    model = train_model(X_train, y_train)
+    data = pd.read_csv(file_path)  # Load the data
+    scaled_data, scaler = load_and_preprocess_data(file_path)
+    X_train, X_test, y_train, y_test = create_datasets(scaled_data)
+    model = build_model((X_train.shape[1], X_train.shape[2]))
+    train_model(model, X_train, y_train)
     
     # Save the trained model
-    import joblib
-    joblib.dump(model, 'stock_prediction_model.pkl')
+    model.save('stock_prediction_model.h5')
     
-    evaluate_model(model, X_test, y_test)
+    evaluate_model(model, X_test, y_test, scaler, data)
 
 if __name__ == "__main__":
     main()
