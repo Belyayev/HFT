@@ -1,12 +1,12 @@
 # Import necessary libraries
 import pandas as pd
+from tensorflow.keras.callbacks import EarlyStopping
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense, Dropout, Input
 import matplotlib.pyplot as plt
 import tensorflow as tf
-from tensorflow.keras.callbacks import EarlyStopping
 
 # Check if GPU is available
 print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
@@ -16,6 +16,12 @@ def load_data(file_path):
     data = pd.read_csv(file_path)
     data.ffill(inplace=True)  # Updated to use ffill()
     return data
+
+def load_and_preprocess_data(file_path):
+    data = pd.read_csv(file_path)
+    data = add_technical_indicators(data)
+    scaled_data, scaler = preprocess_data(data)
+    return scaled_data, scaler
 
 def preprocess_data(data):
     scaler = MinMaxScaler(feature_range=(0, 1))
@@ -93,13 +99,13 @@ def evaluate_model(model, X_test, y_test, scaler, original_data):
         'Actual': original_data['Close'][len(original_data) - len(y_test):].values,
         'Predicted': predicted_prices
     })
-    results.to_excel('predictions.xlsx', index=False)
+    results.to_csv('predictions.csv', index=False)
 
 # Main function to run the steps
 def main():
     file_path = 'SPY_1993_2024.csv'
-    data = load_data(file_path)
-    scaled_data, scaler = preprocess_data(data)
+    data = pd.read_csv(file_path)  # Load the data
+    scaled_data, scaler = load_and_preprocess_data(file_path)
     X_train, X_test, y_train, y_test = create_datasets(scaled_data)
     model = build_model((X_train.shape[1], X_train.shape[2]))
     train_model(model, X_train, y_train)
