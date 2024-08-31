@@ -1,4 +1,5 @@
 import pandas as pd
+import logging
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
@@ -13,9 +14,13 @@ import tensorflow as tf
 # Check if GPU is available
 print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
 
+
+logging.basicConfig(level=logging.INFO)
+
 # Load and preprocess data
 def load_and_preprocess_data(file_path):
     data = pd.read_csv(file_path)
+    data['Date'] = pd.to_datetime(data['Date'])  # Convert Date column to datetime
     data = add_technical_indicators(data)
     data.dropna(inplace=True)  # Ensure no missing values
     return data
@@ -27,6 +32,7 @@ def preprocess_data(data):
 
 # Create training and test sets
 def create_datasets(data, look_back=60):
+    data = data.drop(columns=['Date'])  # Drop the Date column
     X, y = [], []
     for i in range(look_back, len(data)):
         X.append(data.iloc[i-look_back:i].values)
@@ -93,16 +99,24 @@ def evaluate_model(model, X_test, y_test, scaler, original_data):
 
 # Main function to run the steps
 def main():
+    logging.info("Loading and preprocessing data...")
     file_path = 'SPY_1993_2024.csv'
     data = load_and_preprocess_data(file_path)
+    
+    logging.info("Creating datasets...")
     X_train, X_test, y_train, y_test = create_datasets(data)
+    
+    logging.info("Training model...")
     model = train_model(X_train, y_train)
     
-    # Save the trained model
+    logging.info("Saving the trained model...")
     import joblib
     joblib.dump(model, 'stock_prediction_model.pkl')
     
+    logging.info("Evaluating model...")
     evaluate_model(model, X_test, y_test)
+    
+    logging.info("Process completed.")
 
 if __name__ == "__main__":
     main()
