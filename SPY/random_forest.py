@@ -21,7 +21,7 @@ data['MACD'] = MACD(close=data['Close']).macd()
 data.dropna(inplace=True)
 
 # Features and target
-features = data[['Date', 'Open', 'High', 'Low', 'Close', 'SMA20', 'SMA50', 'RSI', 'MACD']]
+features = data[['Date', 'Open', 'High', 'Low', 'Close', 'SMA20', 'SMA50', 'RSI', 'MACD', 'Volume']]
 target = data[['Open', 'High', 'Low', 'Close']]
 
 # Split the data
@@ -38,13 +38,9 @@ predictions = model.predict(X_test.drop(columns=['Date']))
 
 # Create a DataFrame with actual and predicted values
 results = X_test.copy()
-results['Actual_Open'] = y_test['Open'].values
 results['Predicted_Open'] = predictions[:, 0]
-results['Actual_High'] = y_test['High'].values
 results['Predicted_High'] = predictions[:, 1]
-results['Actual_Low'] = y_test['Low'].values
 results['Predicted_Low'] = predictions[:, 2]
-results['Actual_Close'] = y_test['Close'].values
 results['Predicted_Close'] = predictions[:, 3]
 
 # Save to CSV
